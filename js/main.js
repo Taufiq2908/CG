@@ -198,30 +198,56 @@ function formatRupiah(number) {
 window.calculatePrice = function() {
     const consoleEl = document.querySelector('input[name="console"]:checked');
     if (!consoleEl) return;
+    
     const consoleType = consoleEl.value;
     const locationVal = document.getElementById('location').value;
     const isStudent = document.getElementById('student').checked;
+    
     let locationFee = locationVal === "manual" ? 0 : parseInt(locationVal);
     let isManualLocation = locationVal === "manual";
-    let basePricePerDay = consoleType === 'ps4' ? 80000 : 150000;
+    
+    // 1. UPDATE HARGA BARU
+    let basePricePerDay = consoleType === 'ps4' ? 110000 : 200000;
     let subtotal = basePricePerDay * currentDays;
-    let discountPromo = 0;
-    let promoName = "";
+    
+    // 2. LOGIKA PROMO BERTUMPUK (MINGGUAN + LONG PLAY)
+    let promoDeduction = 0;
+    let freeDaysCount = 0;
+    let discountedDaysCount = 0;
 
-    if (currentDays === 7) {
-        discountPromo = basePricePerDay; 
-        promoName = "Promo Mingguan (Free 1 Hari)";
-    } else if (currentDays > 1) {
-        discountPromo = (basePricePerDay * 0.15) * (currentDays - 1);
-        promoName = "Promo Long Play (15% Off)";
+    for (let i = 1; i <= currentDays; i++) {
+        if (i % 7 === 0) {
+            // Hari ke-7, 14, 21 dst adalah GRATIS
+            freeDaysCount++;
+            promoDeduction += basePricePerDay; 
+        } else if (i > 1) {
+            // Hari ke-2 s/d 6 (dan selain kelipatan 7) diskon 15%
+            discountedDaysCount++;
+            promoDeduction += (basePricePerDay * 0.15); 
+        }
     }
 
-    let priceAfterPromo = subtotal - discountPromo;
-    let discountStudent = isStudent ? priceAfterPromo * 0.10 : 0;
+    // 3. LOGIKA DISKON PELAJAR (Dihitung dari sisa harga promo)
+    let priceAfterPromo = subtotal - promoDeduction;
+    let discountStudent = isStudent ? (priceAfterPromo * 0.10) : 0;
     let finalTotal = priceAfterPromo - discountStudent + locationFee;
 
+    // 4. LOGIKA TEKS UPSELL (Tambah X Hari dapat Gratis)
+    const upsellEl = document.getElementById('upsell-prompt');
+    let daysUntilNextFree = 7 - (currentDays % 7);
+    
+    // Tampilkan prompt jika sisa hari menuju gratis kurang dari 7 (artinya sedang tidak di hari gratis)
+    if (daysUntilNextFree < 7 && daysUntilNextFree > 0 && currentDays < 30) {
+        upsellEl.innerHTML = `✨ Tambah <strong>${daysUntilNextFree} hari</strong> lagi dapat <strong>GRATIS 1 Hari!</strong>`;
+        upsellEl.classList.remove('hidden');
+    } else {
+        upsellEl.classList.add('hidden');
+    }
+
+    // 5. UPDATE TAMPILAN DI LAYAR (DOM)
     document.getElementById('label-unit').innerText = `${consoleType.toUpperCase()} x ${currentDays} Hari`;
     document.getElementById('price-unit').innerText = formatRupiah(subtotal);
+    
     const elTotal = document.getElementById('total-price');
     const elShipping = document.getElementById('price-shipping');
     const rollingContainer = document.getElementById('rolling-digits');
@@ -238,14 +264,19 @@ window.calculatePrice = function() {
         updateRollingCounter(formatRupiah(finalTotal));
     }
 
+    // Update Teks Promo di Layar
     const rowPromo = document.getElementById('row-discount-promo');
-    if (discountPromo > 0) {
+    if (promoDeduction > 0) {
         rowPromo.classList.remove('hidden');
-        rowPromo.querySelector('span:first-child').innerText = promoName;
-        document.getElementById('price-discount-promo').innerText = "-" + formatRupiah(discountPromo);
+        let promoTags = [];
+        if (freeDaysCount > 0) promoTags.push(`Free ${freeDaysCount} Hari`);
+        if (discountedDaysCount > 0) promoTags.push(`Diskon 15%`);
+        document.getElementById('label-promo').innerText = "Promo: " + promoTags.join(" & ");
+        document.getElementById('price-discount-promo').innerText = "-" + formatRupiah(promoDeduction);
     } else {
         rowPromo.classList.add('hidden');
     }
+    
     const rowStudent = document.getElementById('row-discount-student');
     if (discountStudent > 0) {
         rowStudent.classList.remove('hidden');
@@ -254,6 +285,7 @@ window.calculatePrice = function() {
         rowStudent.classList.add('hidden');
     }
 
+    // 6. UPDATE LINK WHATSAPP
     const locText = document.getElementById('location').options[document.getElementById('location').selectedIndex].text;
     const message = `Halo Admin CUCs Gaming, saya mau booking:\n\n` +
                     `🎮 Unit: ${consoleType.toUpperCase()}\n` +
